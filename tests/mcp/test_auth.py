@@ -1,12 +1,12 @@
 """Tests for auth.py — 5 tests."""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 
-from clinemcp.mcp.auth import get_auth_token, verify_token
+from clinemcp.mcp.auth import get_auth_token, verify_token_dependency
 
 
 class TestTokenLoading:
@@ -21,44 +21,47 @@ class TestTokenLoading:
 class TestValidToken:
     """test_valid_token_passes"""
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {"CLINEMCP_AUTH_TOKEN": "valid-token"}, clear=True)
-    def test_valid_token_passes(self):
-        request = MagicMock(spec=Request)
-        request.headers = {"Authorization": "Bearer valid-token"}
-        assert verify_token(request) is True
+    async def test_valid_token_passes(self):
+        result = await verify_token_dependency("Bearer valid-token")
+        assert result is True
 
 
 class TestInvalidToken:
     """test_invalid_token_returns_401"""
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {"CLINEMCP_AUTH_TOKEN": "valid-token"}, clear=True)
-    def test_invalid_token_returns_false(self):
-        request = MagicMock(spec=Request)
-        request.headers = {"Authorization": "Bearer wrong-token"}
-        assert verify_token(request) is False
+    async def test_invalid_token_raises_401(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_dependency("Bearer wrong-token")
+        assert exc_info.value.status_code == 401
 
 
 class TestMissingToken:
     """test_missing_token_returns_401"""
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {"CLINEMCP_AUTH_TOKEN": "valid-token"}, clear=True)
-    def test_missing_token_returns_false(self):
-        request = MagicMock(spec=Request)
-        request.headers = {}
-        assert verify_token(request) is False
+    async def test_missing_token_raises_401(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_dependency(None)
+        assert exc_info.value.status_code == 401
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {"CLINEMCP_AUTH_TOKEN": "valid-token"}, clear=True)
-    def test_no_bearer_prefix_returns_false(self):
-        request = MagicMock(spec=Request)
-        request.headers = {"Authorization": "valid-token"}  # No "Bearer " prefix
-        assert verify_token(request) is False
+    async def test_no_bearer_prefix_raises_401(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_dependency("valid-token")  # No "Bearer " prefix
+        assert exc_info.value.status_code == 401
 
 
 class TestNoTokenConfigured:
     """When no token is configured, allow all."""
 
+    @pytest.mark.asyncio
     @patch.dict(os.environ, {}, clear=True)
-    def test_no_token_configured_allows_all(self):
-        request = MagicMock(spec=Request)
-        request.headers = {}
-        assert verify_token(request) is True
+    async def test_no_token_configured_allows_all(self):
+        result = await verify_token_dependency(None)
+        assert result is True

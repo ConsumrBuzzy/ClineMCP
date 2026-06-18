@@ -1,29 +1,22 @@
-"""MCP tool schemas — 5 tools from SDD §5."""
+"""MCP tool handlers — 5 tools from SDD §5."""
 
-from mcp.server.fastmcp import FastMCP
+import asyncio
+import json
+import uuid
+from datetime import datetime, timezone
 
-mcp = FastMCP("ClineMCP")
+from mcp.types import Tool
+
+from clinemcp.runner import cancel_session, start_session
+from clinemcp.sessions import SessionStore
+from clinemcp.telegram import send_message
 
 
-@mcp.tool()
-async def cline_start(task: str, model: str, cwd: str = "C:\\Github\\DuggerBot") -> str:
-    """Spawn Cline session, return session_id.
-
-    Args:
-        task: Full task description passed to Cline
-        model: Ollama model (e.g., "qwen2.5-coder:7b", "qwen3:4b")
-        cwd: Working directory, default "C:\\Github\\DuggerBot"
-
-    Returns:
-        JSON with session_id, status, started_at
-    """
-    import asyncio
-    import json
-    import uuid
-    from datetime import datetime, timezone
-
-    from clinemcp.runner import start_session
-    from clinemcp.sessions import SessionStore
+async def handle_cline_start(arguments: dict) -> str:
+    """Spawn Cline session, return session_id."""
+    task = arguments.get("task", "")
+    model = arguments.get("model", "qwen2.5-coder:7b")
+    cwd = arguments.get("cwd", "C:\\Github\\DuggerBot")
 
     # Check for active session (MVP: one at a time)
     store = SessionStore()
@@ -55,20 +48,9 @@ async def cline_start(task: str, model: str, cwd: str = "C:\\Github\\DuggerBot")
     })
 
 
-@mcp.tool()
-async def cline_status(session_id: str) -> str:
-    """Return current status, elapsed time, output preview.
-
-    Args:
-        session_id: Session ID to check
-
-    Returns:
-        JSON with status, elapsed_seconds, output_preview
-    """
-    import json
-    from datetime import datetime, timezone
-
-    from clinemcp.sessions import SessionStore
+async def handle_cline_status(arguments: dict) -> str:
+    """Return current status, elapsed time, output preview."""
+    session_id = arguments.get("session_id", "")
 
     store = SessionStore()
     await store.init_db()
@@ -101,22 +83,11 @@ async def cline_status(session_id: str) -> str:
     })
 
 
-@mcp.tool()
-async def cline_complete(session_id: str, step_id: int, floor_result: str) -> str:
-    """Mark complete, send Telegram.
-
-    Args:
-        session_id: Session to mark complete
-        step_id: Directive step being completed
-        floor_result: Actual floor (e.g., "249/0/0")
-
-    Returns:
-        JSON with success, telegram_sent, step_id, floor_result
-    """
-    import json
-
-    from clinemcp.sessions import SessionStore
-    from clinemcp.telegram import send_message
+async def handle_cline_complete(arguments: dict) -> str:
+    """Mark complete, send Telegram."""
+    session_id = arguments.get("session_id", "")
+    step_id = arguments.get("step_id", 0)
+    floor_result = arguments.get("floor_result", "")
 
     store = SessionStore()
     await store.init_db()
@@ -141,20 +112,9 @@ async def cline_complete(session_id: str, step_id: int, floor_result: str) -> st
     })
 
 
-@mcp.tool()
-async def cline_cancel(session_id: str) -> str:
-    """Kill active subprocess.
-
-    Args:
-        session_id: Session to cancel
-
-    Returns:
-        JSON with cancelled, was_running
-    """
-    import json
-
-    from clinemcp.runner import cancel_session
-    from clinemcp.sessions import SessionStore
+async def handle_cline_cancel(arguments: dict) -> str:
+    """Kill active subprocess."""
+    session_id = arguments.get("session_id", "")
 
     store = SessionStore()
     await store.init_db()
@@ -168,19 +128,9 @@ async def cline_cancel(session_id: str) -> str:
     })
 
 
-@mcp.tool()
-async def cline_output(session_id: str) -> str:
-    """Return full session output.
-
-    Args:
-        session_id: Session to get output from
-
-    Returns:
-        JSON with full output, exit_code, status
-    """
-    import json
-
-    from clinemcp.sessions import SessionStore
+async def handle_cline_output(arguments: dict) -> str:
+    """Return full session output."""
+    session_id = arguments.get("session_id", "")
 
     store = SessionStore()
     await store.init_db()
@@ -204,6 +154,66 @@ async def cline_output(session_id: str) -> str:
     })
 
 
-def get_mcp() -> FastMCP:
-    """Return configured MCP instance."""
-    return mcp
+def get_tool_list() -> list[Tool]:
+    """Return list of MCP tool definitions."""
+    return [
+        Tool(
+            name="cline_start",
+            description="Spawn Cline session, return session_id",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task": {"type": "string", "description": "Full task description"},
+                    "model": {"type": "string", "description": "Ollama model"},
+                    "cwd": {"type": "string", "description": "Working directory"},
+                },
+                "required": ["task", "model"],
+            },
+        ),
+        Tool(
+            name="cline_status",
+            description="Return current status, elapsed time, output preview",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Session ID to check"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="cline_complete",
+            description="Mark complete, send Telegram",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Session to mark complete"},
+                    "step_id": {"type": "integer", "description": "Directive step"},
+                    "floor_result": {"type": "string", "description": "Floor result (e.g., 249/0/0)"},
+                },
+                "required": ["session_id", "step_id", "floor_result"],
+            },
+        ),
+        Tool(
+            name="cline_cancel",
+            description="Kill active subprocess",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Session to cancel"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="cline_output",
+            description="Return full session output",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Session to get output"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+    ]

@@ -1,12 +1,10 @@
 """Bearer token authentication (ported from TOBOR)."""
 
 import os
-from functools import wraps
+import secrets
+from typing import Annotated
 
-from fastapi import HTTPException, Request
-from fastapi.security import HTTPBearer
-
-security = HTTPBearer()
+from fastapi import HTTPException, Header
 
 
 def get_auth_token() -> str:
@@ -18,28 +16,28 @@ def get_auth_token() -> str:
     return token
 
 
-def verify_token(request: Request) -> bool:
-    """Verify Bearer token from request headers."""
+async def verify_token_dependency(
+    authorization: Annotated[str | None, Header()] = None,
+) -> bool:
+    """FastAPI dependency to verify Bearer token.
+
+    Returns True if token valid or no token configured.
+    Raises HTTPException 401 if token invalid.
+    """
     expected_token = get_auth_token()
     if not expected_token:
         # No token configured - allow all (development mode)
         return True
 
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return False
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header required")
 
-    provided_token = auth_header[7:]  # Remove "Bearer " prefix
-    return provided_token == expected_token
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required")
 
+    provided_token = authorization[7:].strip()  # Remove "Bearer " prefix
 
-def require_auth(func):
-    """Decorator to require authentication on MCP handlers."""
+    if not secrets.compare_digest(provided_token.encode(), expected_token.encode()):
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-    @wraps(func)
-    async def wrapper(request: Request, *args, **kwargs):
-        if not verify_token(request):
-            raise HTTPException(status_code=401, detail="Invalid or missing token")
-        return await func(request, *args, **kwargs)
-
-    return wrapper
+    return True
