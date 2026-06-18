@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +15,24 @@ DEFAULT_TIMEOUT = int(os.environ.get("CLINE_TIMEOUT_SECONDS", "300"))
 
 # Track active subprocesses for cancellation
 _active_processes: dict[str, asyncio.subprocess.Process] = {}
+
+
+def ensure_cline_hub_healthy() -> None:
+    """Kill stale hub and restart clean on ClineMCP startup."""
+    result = subprocess.run([CLINE_PATH, "doctor"], capture_output=True, text=True)
+    if "hub healthy yes" not in result.stdout:
+        # Kill stale hub process
+        subprocess.run([CLINE_PATH, "doctor", "fix"], capture_output=True)
+        # Find and kill the stale process
+        netstat = subprocess.run(["netstat", "-ano"], capture_output=True, text=True)
+        for line in netstat.stdout.splitlines():
+            if "25463" in line and "LISTENING" in line:
+                parts = line.strip().split()
+                if len(parts) >= 5:
+                    pid = parts[-1]
+                    subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+        # Start fresh hub
+        subprocess.Popen([CLINE_PATH, "hub", "start"])
 
 
 async def start_session(
@@ -43,6 +62,7 @@ async def start_session(
         "--cwd", cwd,
         "--timeout", str(DEFAULT_TIMEOUT),
         "--json",
+        "--hooks-dir", "C:\\Users\\cheat\\.cline\\hooks",
     ]
 
     try:

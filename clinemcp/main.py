@@ -32,6 +32,12 @@ logger.info(f"Working directory: {os.getcwd()}")
 def main():
     """Run the MCP server."""
     from clinemcp.mcp.server import create_app
+    from clinemcp.runner import ensure_cline_hub_healthy
+
+    # Ensure Cline Hub is healthy before starting
+    logger.info("Checking Cline Hub health...")
+    ensure_cline_hub_healthy()
+    logger.info("Cline Hub health check complete")
 
     app = create_app()
 
