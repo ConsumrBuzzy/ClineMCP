@@ -22,7 +22,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at   TEXT NOT NULL,
     started_at   TEXT,
     completed_at TEXT,
-    error        TEXT
+    error        TEXT,
+    iterations   INTEGER DEFAULT 0,
+    answer       TEXT,
+    duration_ms  INTEGER,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0
 );
 """
 
@@ -79,6 +84,11 @@ class SessionStore:
         started_at: str | None = None,
         completed_at: str | None = None,
         error: str | None = None,
+        iterations: int | None = None,
+        answer: str | None = None,
+        duration_ms: int | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
     ) -> bool:
         """Update session fields. Returns True if session existed."""
         if status and status not in VALID_STATES:
@@ -111,6 +121,21 @@ class SessionStore:
         if error is not None:
             fields.append("error = ?")
             values.append(error)
+        if iterations is not None:
+            fields.append("iterations = ?")
+            values.append(iterations)
+        if answer is not None:
+            fields.append("answer = ?")
+            values.append(answer)
+        if duration_ms is not None:
+            fields.append("duration_ms = ?")
+            values.append(duration_ms)
+        if input_tokens is not None:
+            fields.append("input_tokens = ?")
+            values.append(input_tokens)
+        if output_tokens is not None:
+            fields.append("output_tokens = ?")
+            values.append(output_tokens)
 
         if not fields:
             return False

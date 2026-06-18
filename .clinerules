@@ -25,3 +25,12 @@ Any state → cancelled via cline_cancel()
 
 ## Tool Return Format
 All tools return JSON via TextContent. No exceptions raised to MCP.
+
+## TASK PHRASING RULES (read before every session)
+1. Tool calls must be explicit. Never describe a tool call — execute it. Wrong: 'I would use read_files to...' Right: use read_files immediately.
+2. Output format must be stated. If the task says 'return X', write X to your response with no code blocks, no explanation, no preamble.
+3. One action per iteration. Do not plan multiple steps. Execute the first action, report the result, done.
+4. File paths are relative to cwd. Never use absolute paths unless the task specifies one.
+5. When a task says 'do not explain' — zero explanation. One line output only.
+6. Read before write. Always read the target file before modifying it.
+7. Stop after the task is complete. Do not suggest follow-up actions.

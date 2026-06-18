@@ -229,3 +229,33 @@ class TestClineOutput:
 
             assert data["status"] == "not_found"
             assert data["output"] == ""
+
+    @pytest.mark.asyncio
+    async def test_cline_status_includes_iterations_when_available(self):
+        """Verify cline_status includes parsed fields when available."""
+        with patch("clinemcp.mcp.tools.SessionStore") as mock_store_class:
+            mock_store = MagicMock()
+            mock_store.init_db = AsyncMock()
+            mock_store.get_session = AsyncMock(
+                return_value={
+                    "session_id": "test-123",
+                    "status": "complete",
+                    "started_at": "2024-01-01T00:00:00+00:00",
+                    "iterations": 5,
+                    "answer": "The answer is 42",
+                    "duration_ms": 15000,
+                    "input_tokens": 1000,
+                    "output_tokens": 500,
+                }
+            )
+            mock_store_class.return_value = mock_store
+
+            result = await handle_cline_status({"session_id": "test-123"})
+            data = json.loads(result)
+
+            assert data["status"] == "complete"
+            assert data["iterations"] == 5
+            assert data["answer"] == "The answer is 42"
+            assert data["duration_ms"] == 15000
+            assert data["input_tokens"] == 1000
+            assert data["output_tokens"] == 500

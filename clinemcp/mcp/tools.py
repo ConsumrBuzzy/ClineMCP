@@ -74,13 +74,27 @@ async def handle_cline_status(arguments: dict) -> str:
     output = session.get("output", "") or ""
     preview = output[:500] if len(output) > 500 else output
 
-    return json.dumps({
+    result = {
         "session_id": session_id,
         "status": session["status"],
         "elapsed_seconds": elapsed,
         "output_preview": preview,
         "error": session.get("error"),
-    })
+    }
+
+    # Include parsed fields when available
+    if session.get("iterations") is not None:
+        result["iterations"] = session["iterations"]
+    if session.get("answer"):
+        result["answer"] = session["answer"]
+    if session.get("duration_ms") is not None:
+        result["duration_ms"] = session["duration_ms"]
+    if session.get("input_tokens") is not None:
+        result["input_tokens"] = session["input_tokens"]
+    if session.get("output_tokens") is not None:
+        result["output_tokens"] = session["output_tokens"]
+
+    return json.dumps(result)
 
 
 async def handle_cline_complete(arguments: dict) -> str:

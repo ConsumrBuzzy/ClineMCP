@@ -1,7 +1,9 @@
 """Cline subprocess management — runner.py from SDD §6."""
 
 import asyncio
+import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -60,11 +62,16 @@ async def start_session(
             )
             exit_code = proc.returncode
             status = "complete" if exit_code == 0 else "failed"
+
+            # Parse JSON output for enriched session data
+            parsed = _parse_json_output(output)
+
         except asyncio.TimeoutError:
             proc.kill()
             output = "Session timed out"
             exit_code = -1
             status = "failed"
+            parsed = {}
 
         completed_at = datetime.now(timezone.utc).isoformat()
         await sessions.update_session(
@@ -73,6 +80,11 @@ async def start_session(
             output=output,
             exit_code=exit_code,
             completed_at=completed_at,
+            iterations=parsed.get("iterations"),
+            answer=parsed.get("answer"),
+            duration_ms=parsed.get("duration_ms"),
+            input_tokens=parsed.get("input_tokens"),
+            output_tokens=parsed.get("output_tokens"),
         )
 
     except Exception as e:
@@ -130,3 +142,69 @@ def get_active_process(session_id: str) -> asyncio.subprocess.Process | None:
 def clear_active_processes() -> None:
     """Clear active process tracking (for testing)."""
     _active_processes.clear()
+
+
+def _parse_json_output(output: str) -> dict[str, Any]:
+    """Parse newline-delimited JSON output from Cline.
+
+    Extracts:
+    - iterations: count of iteration_start events
+    - answer: text from done event (stripped of code blocks)
+    - duration_ms: from run_result
+    - input_tokens/output_tokens: from run_result usage
+    - error: from error events
+    """
+    result: dict[str, Any] = {
+        "iterations": 0,
+        "answer": None,
+        "duration_ms": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "error": None,
+    }
+
+    for line in output.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        event_type = event.get("type", "")
+
+        # Error events
+        if event_type == "error":
+            result["error"] = event.get("message", "Unknown error")
+
+        # Agent events (iteration tracking and answer extraction)
+        elif event_type == "agent_event":
+            agent_event = event.get("event", {})
+            agent_event_type = agent_event.get("type", "")
+
+            if agent_event_type == "iteration_start":
+                result["iterations"] = result.get("iterations", 0) + 1
+
+            elif agent_event_type == "done":
+                text = agent_event.get("text", "")
+                # Strip code blocks if present
+                if text.startswith("```") and text.endswith("```"):
+                    # Remove first and last line (code block markers)
+                    lines = text.split("\n")
+                    if len(lines) > 2:
+                        text = "\n".join(lines[1:-1])
+                result["answer"] = text.strip() if text else None
+
+        # Run result (duration and token counts)
+        elif event_type == "run_result":
+            result["duration_ms"] = event.get("durationMs")
+            usage = event.get("usage", {})
+            result["input_tokens"] = usage.get("inputTokens", 0)
+            result["output_tokens"] = usage.get("outputTokens", 0)
+            # Also update iterations if provided
+            if "iterations" in event:
+                result["iterations"] = event["iterations"]
+
+    return result

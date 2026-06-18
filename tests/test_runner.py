@@ -196,3 +196,57 @@ class TestCancel:
         """Verify cancel returns False when nothing to cancel."""
         result = await cancel_session("nonexistent", temp_db)
         assert result is False
+
+
+class TestParseJsonOutput:
+    """Tests for _parse_json_output function — 5 tests from directive Step 2."""
+
+    def test_parse_json_output_extracts_iterations(self):
+        """Verify iteration_start events are counted."""
+        from clinemcp.runner import _parse_json_output
+
+        output = """{"type": "agent_event", "event": {"type": "iteration_start"}}
+{"type": "agent_event", "event": {"type": "iteration_start"}}
+{"type": "agent_event", "event": {"type": "iteration_start"}}"""
+
+        result = _parse_json_output(output)
+        assert result["iterations"] == 3
+
+    def test_parse_json_output_extracts_answer(self):
+        """Verify done event text is extracted as answer."""
+        from clinemcp.runner import _parse_json_output
+
+        output = """{"type": "agent_event", "event": {"type": "done", "text": "The answer is 42"}}"""
+
+        result = _parse_json_output(output)
+        assert result["answer"] == "The answer is 42"
+
+    def test_parse_json_output_extracts_duration(self):
+        """Verify duration_ms is extracted from run_result."""
+        from clinemcp.runner import _parse_json_output
+
+        output = """{"type": "run_result", "durationMs": 15000, "iterations": 5}"""
+
+        result = _parse_json_output(output)
+        assert result["duration_ms"] == 15000
+        assert result["iterations"] == 5
+
+    def test_parse_json_output_handles_error_event(self):
+        """Verify error events are captured."""
+        from clinemcp.runner import _parse_json_output
+
+        output = """{"type": "error", "message": "Something went wrong"}"""
+
+        result = _parse_json_output(output)
+        assert result["error"] == "Something went wrong"
+
+    def test_parse_json_output_extracts_token_counts(self):
+        """Verify input/output tokens are extracted from usage."""
+        from clinemcp.runner import _parse_json_output
+
+        output = """{"type": "run_result", "durationMs": 5000, "usage": {"inputTokens": 1000, "outputTokens": 500}}"""
+
+        result = _parse_json_output(output)
+        assert result["input_tokens"] == 1000
+        assert result["output_tokens"] == 500
+        assert result["duration_ms"] == 5000
