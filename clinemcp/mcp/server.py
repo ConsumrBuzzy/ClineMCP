@@ -93,6 +93,7 @@ def create_app() -> FastAPI:
     @app.get("/sse", dependencies=[Depends(verify_token_dependency)])
     async def sse_endpoint(request: Request):
         """MCP SSE endpoint with auth and session management."""
+        logger.info(f"SSE endpoint accessed from {request.client.host if request.client else 'unknown'}")
         # Check for existing session ID
         session_id = request.headers.get("Mcp-Session-Id")
 
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     @app.post("/messages/", dependencies=[Depends(verify_token_dependency)])
     async def messages_endpoint(request: Request):
         """MCP messages endpoint with auth."""
+        logger.info(f"Messages endpoint accessed from {request.client.host if request.client else 'unknown'}")
         sse_transport = request.app.state.sse_transport
         return await sse_transport.handle_post_message(
             request.scope, request.receive, request._send
