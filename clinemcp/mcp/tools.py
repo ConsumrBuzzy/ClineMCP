@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from mcp.types import Tool
 
+from clinemcp.clinerules import ensure_clinerules as _ensure_clinerules
 from clinemcp.runner import cancel_session, start_session
 from clinemcp.sessions import SessionStore
 from clinemcp.telegram import send_message
@@ -169,6 +170,13 @@ async def handle_cline_output(arguments: dict) -> str:
     })
 
 
+async def handle_ensure_clinerules(arguments: dict) -> str:
+    """Check for .clinerules in repo and generate if missing."""
+    repo_path = arguments.get("repo_path", "")
+    result = _ensure_clinerules(repo_path)
+    return json.dumps(result)
+
+
 def get_tool_list() -> list[Tool]:
     """Return list of MCP tool definitions."""
     return [
@@ -230,5 +238,23 @@ def get_tool_list() -> list[Tool]:
                 },
                 "required": ["session_id"],
             },
+        ),
+        Tool(
+            name="ensure_clinerules",
+            description=(
+                "Check for .clinerules in a repo and generate one if missing. "
+                "Returns the path and content of the .clinerules file. "
+                "Never overwrites an existing .clinerules."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Absolute path to the repo root directory."
+                    }
+                },
+                "required": ["repo_path"]
+            }
         ),
     ]
